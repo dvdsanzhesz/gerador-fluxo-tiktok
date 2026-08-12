@@ -3,8 +3,11 @@
 //  de fluxos do UnniChat (mesmo formato obtido ao selecionar os nós e
 //  copiar com Ctrl+C).
 //
+//  As tags mudam conforme a pessoa dona do fluxo (Nicole ou Alyne) — ver PESSOAS.
+//  Todo o resto do fluxo é idêntico entre as duas.
+//
 //  Estrutura gerada:
-//    [entrada]  action add_tag ["Fluxo de inscrição", "[NICOLE] - TIKTOK /CURSOS"]
+//    [entrada]  action add_tag ["Fluxo de inscrição", "[<PESSOA>] - TIKTOK /CURSOS"]
 //        └─> UMA ÚNICA mensagem de lista (message-list) com VÁRIAS SEÇÕES,
 //            uma seção por semana ("Cursos que começam DD/MM"), e cada linha
 //            apontando para o ramo do curso.
@@ -12,7 +15,7 @@
 //                    └─> delay 10 min
 //                          └─> condicional "clicou?" — se NÃO clicou, lembrete
 //    Ramo de cada curso:
-//        action add_tag ["[NICOLE] - TIKTOK CLICOU /CURSOS"]
+//        action add_tag ["[<PESSOA>] - TIKTOK CLICOU /CURSOS"]
 //          ├─ curso de OUTRA conta → mensagem cta-url (wa.me/<fone>?text=<frase gatilho>)
 //          └─ curso da MESMA conta do fluxo → nó "Encaminhar para automação"
 //             (o UnniChat não exporta o vínculo; precisa ser apontado à mão)
@@ -31,10 +34,6 @@ export const CONFIG_TIKTOK = {
     "Cessetembro 4": "5511990127257",
   },
 
-  tagsEntrada: ["Fluxo de inscrição", "[NICOLE] - TIKTOK /CURSOS"],
-  tagClicou: "[NICOLE] - TIKTOK CLICOU /CURSOS",
-  // A condicional aceita as duas tags (a nova e a antiga usada no fluxo manual).
-  tagsCondicionalClicou: ["[NICOLE] - TIKTOK CLICOU /CURSOS", 'clicou "/cursos" Tiktok'],
   tagRemoverNoFim: "Fluxo de inscrição",
   delayLembreteMinutos: 10,
 
@@ -55,6 +54,24 @@ export const CONFIG_TIKTOK = {
       "Ei, passando só para lembrar que os cursos estão gratuitos por tempo limitado\n\n"
       + "Bora começar 2026 com tudo! \n\n"
       + "Clique nos botões acima e escolha seu curso 🚀 👆",
+  },
+};
+
+//  ————— Pessoas (a ÚNICA coisa que muda entre os fluxos) —————
+//  Mesma conta, mesma conexão, mesmos cursos e textos: só as tags mudam.
+export const PESSOAS = {
+  nicole: {
+    nome: "Nicole",
+    tagsEntrada: ["Fluxo de inscrição", "[NICOLE] - TIKTOK /CURSOS"],
+    tagClicou: "[NICOLE] - TIKTOK CLICOU /CURSOS",
+    // A condicional aceita as duas tags (a nova e a antiga usada no fluxo manual).
+    tagsCondicionalClicou: ["[NICOLE] - TIKTOK CLICOU /CURSOS", 'clicou "/cursos" Tiktok'],
+  },
+  alyne: {
+    nome: "Alyne",
+    tagsEntrada: ["Fluxo de inscrição", "[ALYNE] - TIKTOK /CURSOS"],
+    tagClicou: "[ALYNE] - TIKTOK CLICOU /CURSOS",
+    tagsCondicionalClicou: ["[ALYNE] - TIKTOK CLICOU /CURSOS"],
   },
 };
 
@@ -299,7 +316,8 @@ function noCondicionalClicou(id, x, y, tags, falseId) {
 //  semanas: [{ semana: "DD/MM/YYYY", cursos: [{ nomeCurso, tipoEvento, contaAPI, nomeWhatsapp }] }]
 //  Segunda-feira: [atual, +7, +14]. Quarta: [+7, +14].
 //  Gera UMA ÚNICA mensagem de lista com uma seção por semana.
-export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK) {
+//  pessoa: define APENAS as tags (ver PESSOAS).
+export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK, pessoa = PESSOAS.nicole) {
   const nodes = [];
   const avisos = [];
   const t = config.textos;
@@ -366,7 +384,7 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK) {
         }));
       }
 
-      nodes.push(noAcaoTag(idAcao, x, y, "add_tag", [config.tagClicou], idDestino));
+      nodes.push(noAcaoTag(idAcao, x, y, "add_tag", [pessoa.tagClicou], idDestino));
       linhas.push({ titulo: tituloLinhaLista(nome), sonId: idAcao });
 
       if (nome.length > 24) {
@@ -398,7 +416,7 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK) {
 
   nodes.push(noAcaoTag(idRemove, X_LISTA - 100, 2600, "remove_tag", [config.tagRemoverNoFim], idDelay));
   nodes.push(noDelayMinutos(idDelay, X_LISTA - 100, 2950, config.delayLembreteMinutos, idCond));
-  nodes.push(noCondicionalClicou(idCond, X_LISTA - 100, 3300, config.tagsCondicionalClicou, idLembrete));
+  nodes.push(noCondicionalClicou(idCond, X_LISTA - 100, 3300, pessoa.tagsCondicionalClicou, idLembrete));
   nodes.push(noTexto(idLembrete, X_LISTA - 100, 3850, t.lembrete));
 
   // UMA ÚNICA mensagem de lista com todas as seções, já ligada na cauda.
@@ -418,7 +436,7 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK) {
 
   // Entrada do fluxo.
   const idEntrada = novoId();
-  nodes.push(noAcaoTag(idEntrada, 100, 0, "add_tag", config.tagsEntrada, idLista));
+  nodes.push(noAcaoTag(idEntrada, 100, 0, "add_tag", pessoa.tagsEntrada, idLista));
 
   return {
     fluxo: {
