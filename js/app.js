@@ -17,6 +17,18 @@ import {
 
 const $ = (id) => document.getElementById(id);
 
+// Reaberturas já rodaram em semana anterior e NÃO entram no fluxo do TikTok por padrão.
+// 1º) usa o campo `tipo` gravado na abertura pelo Hub ('abertura' | 'reabertura');
+// 2º) sem o campo (cadastros antigos), olha o código: só é reabertura se o rN do
+//     final vier depois de um NÚMERO (ex.: condir1r1 ✔; condir1 ✘ — o "r" é do nome).
+function ehReabertura(abertura) {
+  const tipo = String(abertura?.tipo || '').trim().toLowerCase();
+  if (tipo === 'reabertura') return true;
+  if (tipo === 'abertura') return false;
+  const codigo = String(abertura?.codigoAbertura || abertura?.id || '').trim();
+  return /(?<=\d)r\d+$/i.test(codigo);
+}
+
 const estado = {
   modo: null,
   pessoa: 'nicole',   // "nicole" | "alyne" — muda somente as tags do fluxo
@@ -139,7 +151,13 @@ async function buscarCursos() {
       estado.semanas.push({
         ...def,
         aberturas,
-        selecionados: new Set(aberturas.map((a) => (a.nomeCurso || '').trim()).filter(Boolean)),
+        // Reaberturas (r1, r2...) começam desmarcadas — não vão pro fluxo do TikTok.
+        selecionados: new Set(
+          aberturas
+            .filter((a) => !ehReabertura(a))
+            .map((a) => (a.nomeCurso || '').trim())
+            .filter(Boolean)
+        ),
       });
     }
 
@@ -184,10 +202,11 @@ function renderSelecao() {
     grupo.aberturas.forEach((abertura) => {
       const nome = (abertura.nomeCurso || '').trim();
       if (!nome) return;
+      const reabertura = ehReabertura(abertura);
       const chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = 'chip ativo';
-      chip.textContent = `${nome} · ${abertura.contaAPI || 'sem conta'}`;
+      chip.className = reabertura ? 'chip' : 'chip ativo';
+      chip.textContent = `${nome} · ${abertura.contaAPI || 'sem conta'}${reabertura ? ' · 🔁 reabertura (fora por padrão)' : ''}`;
       chip.addEventListener('click', () => {
         if (grupo.selecionados.has(nome)) {
           grupo.selecionados.delete(nome);
