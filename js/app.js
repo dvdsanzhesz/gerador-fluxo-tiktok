@@ -19,7 +19,7 @@ const $ = (id) => document.getElementById(id);
 
 const estado = {
   modo: null,
-  pessoa: 'nicole',
+  pessoa: 'nicole',   // "nicole" | "alyne" — muda somente as tags do fluxo
   referencia: null,
   semanas: [],
   resultado: null,
@@ -78,7 +78,15 @@ function initLogin() {
       await signInWithEmailAndPassword(auth, $('login-email').value.trim(), $('login-senha').value);
     } catch (err) {
       console.error(err);
-      msg.textContent = 'Não consegui entrar. Confira o e-mail e a senha (os mesmos do CESS Hub).';
+      const codigo = err?.code || err?.message || 'erro desconhecido';
+      const dicas = {
+        'auth/invalid-credential': 'E-mail ou senha incorretos (os mesmos do CESS Hub).',
+        'auth/invalid-email': 'O e-mail digitado não é válido.',
+        'auth/user-disabled': 'Este usuário está desativado no Hub.',
+        'auth/too-many-requests': 'Muitas tentativas — espere alguns minutos e tente de novo.',
+        'auth/network-request-failed': 'Falha de rede — confira sua internet ou se algum bloqueador está ativo.',
+      };
+      msg.textContent = `${dicas[codigo] || 'Não consegui entrar.'} [código: ${codigo}]`;
     }
   });
 
@@ -226,18 +234,17 @@ function gerar() {
     wrap.style.display = 'block';
     wrap.innerHTML = `
       <h2>Pronto!</h2>
-      <div class="status success">✅ Fluxo da <strong>${pessoa.nome}</strong> gerado:
-        ${resultado.totalCursos} curso(s) em ${resultado.totalListas} lista(s).<br>
-        Tag de entrada: <code>${pessoa.tagsEntrada[pessoa.tagsEntrada.length - 1]}</code></div>
+      <div class="status success">✅ Fluxo da ${pessoa.nome} gerado: ${resultado.totalCursos} curso(s),
+        ${resultado.totalSecoes} seção(ões) em 1 lista. Tags: ${pessoa.tagClicou}</div>
       ${avisosHtml}
       <div class="acoes">
         <button id="tk-btn-copiar" class="btn btn-primario">📋 Copiar para colar no UnniChat</button>
         <button id="tk-btn-baixar" class="btn">⬇️ Baixar .json</button>
       </div>
-      <p class="hint">No UnniChat: abra o fluxo "/cursos" do TikTok da ${pessoa.nome}, apague os
-        nós antigos (menos o gatilho inicial), clique no quadro e cole (Ctrl+V). Depois ligue o
-        gatilho inicial ao nó de entrada (o que adiciona as tags
-        ${pessoa.tagsEntrada.map((tag) => `"${tag}"`).join(' + ')}).</p>
+      <p class="hint">No UnniChat: abra o fluxo "/cursos" do TikTok, apague os nós antigos
+        (menos o gatilho inicial), clique no quadro e cole (Ctrl+V). Depois ligue o gatilho
+        inicial ao nó de entrada (o que adiciona as tags "Fluxo de inscrição" +
+        "[NICOLE] - TIKTOK /CURSOS").</p>
     `;
 
     const jsonTexto = JSON.stringify(resultado.fluxo);
