@@ -323,11 +323,12 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK, pessoa = PESS
   const avisos = [];
   const t = config.textos;
 
+  // Layout: cada curso é UMA LINHA horizontal (tag → mensagem, lado a lado),
+  // um curso embaixo do outro — igual ao fluxo feito à mão.
   const X_LISTA = 600;
-  const X_RAMOS = 1400;
-  const LARGURA_RAMO = 360;
-  const RAMOS_POR_LINHA = 6;
-  const ALTURA_RAMO = 760;
+  const X_RAMOS = 1500;          // coluna da ação de tag
+  const X_DESTINO = X_RAMOS + 420; // mensagem/encaminhamento à direita da tag
+  const ALTURA_LINHA = 420;      // espaço vertical entre um curso e outro
 
   // Ramos por curso (criados antes para termos os IDs nas linhas da lista)
   let indiceRamo = 0;
@@ -346,10 +347,8 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK, pessoa = PESS
 
       const tipo = curso.tipoEvento || "curso";
       const conta = String(curso.contaAPI || "").trim();
-      const col = indiceRamo % RAMOS_POR_LINHA;
-      const lin = Math.floor(indiceRamo / RAMOS_POR_LINHA);
-      const x = X_RAMOS + col * LARGURA_RAMO;
-      const y = -600 + lin * ALTURA_RAMO;
+      const x = X_RAMOS;
+      const y = -600 + indiceRamo * ALTURA_LINHA;
       indiceRamo += 1;
 
       const idAcao = novoId();
@@ -359,7 +358,7 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK, pessoa = PESS
         // Curso da mesma conta do fluxo: encaminha para a automação de inscrição.
         idDestino = novoId();
         const nomeAutomacao = `Fluxo ${dataCurta(grupo.semana)} - ${nome}`;
-        nodes.push(noEncaminharAutomacao(idDestino, x, y + 360, nomeAutomacao));
+        nodes.push(noEncaminharAutomacao(idDestino, X_DESTINO, y, nomeAutomacao));
         avisos.push(
           `"${nome}" é da conta ${conta || "?"} (mesma do fluxo): após colar, `
           + `abra o nó "Encaminhar para automação" e selecione o fluxo de inscrição `
@@ -378,7 +377,7 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK, pessoa = PESS
           ? preencher(t.corpoCtaCongresso, { nome })
           : preencher(t.corpoCtaCurso, { nome });
         idDestino = novoId();
-        nodes.push(noCtaUrl(idDestino, x, y + 360, {
+        nodes.push(noCtaUrl(idDestino, X_DESTINO, y, {
           corpo,
           url: `https://wa.me/${fone || ""}?text=${frase}`,
           textoBotao: t.botaoCta,
