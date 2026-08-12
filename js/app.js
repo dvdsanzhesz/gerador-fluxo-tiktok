@@ -18,7 +18,7 @@ import {
 const $ = (id) => document.getElementById(id);
 
 // Versão do gerador — aparece na tela pra sabermos qual arquivo está rodando.
-const VERSAO = 'v7';
+const VERSAO = 'v8';
 
 // ————— Regra do TikTok: quem já estava na semana anterior fica FORA —————
 // Um curso/congresso não entra no fluxo se:
@@ -281,6 +281,8 @@ function renderSelecao() {
       chip.type = 'button';
       chip.className = 'chip ativo';
       chip.textContent = `${nome} · ${abertura.contaAPI || 'sem conta'}`;
+      // Passe o mouse no chip pra ver o código — ajuda a investigar intrusos.
+      chip.title = `código: ${abertura.codigoAbertura || abertura.id || '?'} · semana: ${abertura.semana || '?'}`;
       chip.addEventListener('click', () => {
         if (grupo.selecionados.has(nome)) {
           grupo.selecionados.delete(nome);
