@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerador Fluxo TikTok — CESS</title>
+  <style>
+    :root {
+      --fundo: #0f1a17;
+      --painel: #16241f;
+      --borda: #24382f;
+      --texto: #e8f2ee;
+      --suave: #9db4ab;
+      --verde: #2b8a78;
+      --verde-claro: #37a98f;
+      --erro: #e05c5c;
+      --aviso: #d9a441;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--fundo); color: var(--texto); min-height: 100vh;
+    }
+    .container { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; }
+    header.topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+    h1 { font-size: 1.4rem; margin: 0; }
+    h1 small { display: block; font-size: .85rem; color: var(--suave); font-weight: 400; margin-top: 4px; }
+    h2 { font-size: 1.05rem; margin: 22px 0 8px; }
+    .painel { background: var(--painel); border: 1px solid var(--borda); border-radius: 14px; padding: 20px; }
+    label { display: block; font-size: .85rem; color: var(--suave); margin: 14px 0 6px; }
+    input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--borda);
+      background: #0c1512; color: var(--texto); font-size: .95rem; }
+    .btn { padding: 10px 16px; border-radius: 8px; border: 1px solid var(--borda);
+      background: #1d2f28; color: var(--texto); cursor: pointer; font-size: .95rem; }
+    .btn:hover { border-color: var(--verde); }
+    .btn-primario { background: var(--verde); border-color: var(--verde); font-weight: 600; }
+    .btn-primario:hover { background: var(--verde-claro); }
+    .btn-largo { width: 100%; margin-top: 14px; }
+    .btn:disabled { opacity: .5; cursor: wait; }
+    .modos { display: flex; gap: 10px; }
+    .tk-modo { flex: 1; }
+    .tk-modo.ativo, .tk-pessoa.ativo, .tk-formato.ativo { outline: 2px solid var(--verde); font-weight: 700; }
+    .tk-pessoa, .tk-formato { flex: 1; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
+    .chip-semana { display: inline-block; margin: 4px 8px 4px 0; padding: 6px 10px;
+      border-radius: 8px; background: rgba(43,138,120,.16); font-size: .85rem; }
+    .status { display: none; margin-top: 14px; padding: 10px 14px; border-radius: 8px; font-size: .9rem; }
+    .status.info { display: block; background: rgba(120,150,220,.12); }
+    .status.success { display: block; background: rgba(43,138,120,.18); }
+    .status.error { display: block; background: rgba(224,92,92,.15); }
+    .status.warning { display: block; background: rgba(217,164,65,.14); }
+    .grupo { margin: 14px 0; }
+    .grupo-titulo { font-weight: 700; margin-bottom: 6px; }
+    .grupo-titulo small { font-weight: 400; color: var(--suave); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { padding: 7px 12px; border-radius: 999px; border: 1px solid var(--borda);
+      background: transparent; color: var(--suave); cursor: pointer; font-size: .85rem; }
+    .chip.ativo { background: rgba(43,138,120,.2); color: var(--texto); border-color: var(--verde); }
+    .hint { font-size: .83rem; color: var(--suave); }
+    .acoes { display: flex; gap: 10px; margin: 12px 0; flex-wrap: wrap; }
+    .avisos ul { margin: 6px 0 0 18px; padding: 0; }
+    .vazio { color: var(--suave); }
+    /* Login */
+    #tela-login { display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 16px; }
+    .card-login { width: 100%; max-width: 380px; }
+    .erro-login { color: var(--erro); font-size: .85rem; margin-top: 10px; min-height: 1em; }
+    .usuario { font-size: .82rem; color: var(--suave); display: flex; align-items: center; gap: 10px; }
+  </style>
+</head>
+<body>
+  <!-- ————— LOGIN ————— -->
+  <div id="tela-login">
+    <div class="painel card-login">
+      <h1>⚓ Gerador Fluxo TikTok<small>Entre com seu e-mail e senha do CESS Hub</small></h1>
+      <form id="form-login">
+        <label for="login-email">E-mail</label>
+        <input type="email" id="login-email" autocomplete="username" required>
+        <label for="login-senha">Senha</label>
+        <input type="password" id="login-senha" autocomplete="current-password" required>
+        <button type="submit" class="btn btn-primario btn-largo">Entrar</button>
+        <div id="login-erro" class="erro-login"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ————— APP ————— -->
+  <div id="tela-app" style="display:none">
+    <div class="container">
+      <header class="topo">
+        <h1>⚓ Gerador do Fluxo "/cursos" do TikTok
+          <small>Segunda: semana atual + divulgações · Quarta: só divulgações</small></h1>
+        <div class="usuario">
+          <span id="tk-versao" style="opacity:.6"></span>
+          <span id="usuario-logado"></span>
+          <button id="btn-sair" class="btn">Sair</button>
+        </div>
+      </header>
+
+      <div class="painel">
+        <div class="grid-2">
+          <div>
+            <label>Fluxo de quem? (muda só as tags)</label>
+            <div class="modos">
+              <button type="button" class="btn tk-pessoa" data-pessoa="nicole">Nicole</button>
+              <button type="button" class="btn tk-pessoa" data-pessoa="alyne">Alyne</button>
+            </div>
+          </div>
+          <div>
+            <label>Modo</label>
+            <div class="modos">
+              <button type="button" class="btn tk-modo" data-modo="segunda">Segunda (3 semanas)</button>
+              <button type="button" class="btn tk-modo" data-modo="quarta">Quarta (2 semanas)</button>
+            </div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label for="tk-data-ref">Data de referência (qualquer dia da semana atual)</label>
+            <input type="date" id="tk-data-ref">
+          </div>
+          <div>
+            <label>Formato da lista no WhatsApp</label>
+            <div class="modos">
+              <button type="button" class="btn tk-formato" data-formato="unica">1 mensagem só</button>
+              <button type="button" class="btn tk-formato" data-formato="semana">1 por semana</button>
+            </div>
+          </div>
+        </div>
+
+        <label>Semanas que entram no fluxo</label>
+        <div id="tk-semanas-preview"></div>
+
+        <button id="tk-btn-buscar" class="btn btn-primario btn-largo">🔎 Buscar Cursos no Calendário</button>
+        <div id="tk-status" class="status"></div>
+        <div id="tk-geracao" style="display:none"></div>
+        <div id="tk-download" style="display:none"></div>
+      </div>
+
+      <p class="hint" style="margin-top:14px">CESS Automation System · Fluxo TikTok · Os textos e
+        telefones das contas ficam em <code>js/gerador-tiktok-core.js</code> (CONFIG_TIKTOK).</p>
+    </div>
+  </div>
+
+  <!-- Detector de erro: se o JavaScript não carregar, avisa na tela em vez de falhar em silêncio -->
+  <div id="erro-js" style="display:none;position:fixed;bottom:12px;left:12px;right:12px;z-index:999;
+    background:#5c1f1f;color:#ffd7d7;padding:12px 16px;border-radius:10px;font-size:.85rem"></div>
+  <script>
+    window.addEventListener('error', function (e) {
+      var box = document.getElementById('erro-js');
+      box.style.display = 'block';
+      box.textContent = '⚠️ Erro ao carregar o site (me mande um print disto): '
+        + (e.message || 'falha ao carregar ' + (e.target && e.target.src ? e.target.src : 'um arquivo'));
+    }, true);
+    window.addEventListener('unhandledrejection', function (e) {
+      var box = document.getElementById('erro-js');
+      box.style.display = 'block';
+      box.textContent = '⚠️ Erro no site (me mande um print disto): ' + (e.reason && (e.reason.message || e.reason));
+    });
+  </script>
+  <!-- ?v=11 força o navegador a baixar a versão nova (anti-cache) -->
+  <script type="module" src="js/app.js?v=11"></script>
+</body>
+</html>
