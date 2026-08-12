@@ -3,11 +3,8 @@
 //  de fluxos do UnniChat (mesmo formato obtido ao selecionar os nós e
 //  copiar com Ctrl+C).
 //
-//  As tags mudam conforme a pessoa dona do fluxo (Nicole ou Alyne) — ver PESSOAS.
-//  Todo o resto do fluxo é idêntico entre as duas.
-//
 //  Estrutura gerada:
-//    [entrada]  action add_tag ["Fluxo de inscrição", "[<PESSOA>] - TIKTOK /CURSOS"]
+//    [entrada]  action add_tag ["Fluxo de inscrição", "[NICOLE] - TIKTOK /CURSOS"]
 //        └─> UMA ÚNICA mensagem de lista (message-list) com VÁRIAS SEÇÕES,
 //            uma seção por semana ("Cursos que começam DD/MM"), e cada linha
 //            apontando para o ramo do curso.
@@ -15,7 +12,7 @@
 //                    └─> delay 10 min
 //                          └─> condicional "clicou?" — se NÃO clicou, lembrete
 //    Ramo de cada curso:
-//        action add_tag ["[<PESSOA>] - TIKTOK CLICOU /CURSOS"]
+//        action add_tag ["[NICOLE] - TIKTOK CLICOU /CURSOS"]
 //          ├─ curso de OUTRA conta → mensagem cta-url (wa.me/<fone>?text=<frase gatilho>)
 //          └─ curso da MESMA conta do fluxo → nó "Encaminhar para automação"
 //             (o UnniChat não exporta o vínculo; precisa ser apontado à mão)
@@ -57,14 +54,14 @@ export const CONFIG_TIKTOK = {
   },
 };
 
-//  ————— Pessoas (a ÚNICA coisa que muda entre os fluxos) —————
-//  Mesma conta, mesma conexão, mesmos cursos e textos: só as tags mudam.
+//  ————— Pessoas (cada fluxo do TikTok tem tags próprias) —————
+//  As duas rodam na MESMA conta (Cessetembro 1); só mudam as tags.
 export const PESSOAS = {
   nicole: {
     nome: "Nicole",
     tagsEntrada: ["Fluxo de inscrição", "[NICOLE] - TIKTOK /CURSOS"],
     tagClicou: "[NICOLE] - TIKTOK CLICOU /CURSOS",
-    // A condicional aceita as duas tags (a nova e a antiga usada no fluxo manual).
+    // A condicional aceita também a tag antiga usada no fluxo manual.
     tagsCondicionalClicou: ["[NICOLE] - TIKTOK CLICOU /CURSOS", 'clicou "/cursos" Tiktok'],
   },
   alyne: {
@@ -316,7 +313,7 @@ function noCondicionalClicou(id, x, y, tags, falseId) {
 //  semanas: [{ semana: "DD/MM/YYYY", cursos: [{ nomeCurso, tipoEvento, contaAPI, nomeWhatsapp }] }]
 //  Segunda-feira: [atual, +7, +14]. Quarta: [+7, +14].
 //  Gera UMA ÚNICA mensagem de lista com uma seção por semana.
-//  pessoa: define APENAS as tags (ver PESSOAS).
+//  pessoa: PESSOAS.nicole (padrão) ou PESSOAS.alyne — muda somente as tags.
 export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK, pessoa = PESSOAS.nicole) {
   const nodes = [];
   const avisos = [];
