@@ -5,12 +5,31 @@
 //
 //  Estrutura reproduzida do fluxo feito à mão pela equipe:
 //    [entrada]  action add_tag ["Fluxo de inscrição", "[NICOLE] - TIKTOK /CURSOS"]
-//        └─> lista de cursos da 1ª semana (message-list)
-//              ├─ (sequencial) lista da 2ª semana
-//              ├─ (sequencial) lista da 3ª semana (só na segunda-feira)
-//              └─ (saída) remove_tag "Fluxo de inscrição"
+//        └─> BLOCO ÚNICO "Fluxo de mensagens" (um só cartão no quadro):
+//              1. lista de cursos da 1ª semana (message-list)   ← cabeça do bloco
+//              2. espera de 1 segundo (delay type "seconds")    ┐
+//              3. lista da 2ª semana                            │ filhos sequenciais:
+//              4. espera de 1 segundo                           │ sequential: true +
+//              5. lista da 3ª semana (só na segunda-feira)      ┘ mesma posição da cabeça
+//              └─> (saída, no ÚLTIMO passo do bloco) remove_tag "Fluxo de inscrição"
 //                    └─> delay 10 min
 //                          └─> condicional "clicou?" — se NÃO clicou, lembrete
+//
+//  Como o UnniChat representa um bloco de mensagens sequenciais (confirmado nos
+//  fluxos reais exportados pelo Hub, ex.: public/templates/esqueleto_fluxo_*.json):
+//    - os passos do bloco são nós normais, encadeados pelo sonId comum
+//      (cabeça.sonId -> passo2.id -> passo3.id -> ... -> último.sonId = saída);
+//    - todo passo depois da cabeça carrega `sequential: true` (é isso que faz o
+//      editor desenhar o passo DENTRO do cartão do pai em vez de um cartão solto)
+//      + `sequentialFatherId` apontando para a cabeça do bloco, e fica na MESMA
+//      posição da cabeça;
+//    - a cabeça também guarda `sequentialSonId` = próximo passo do bloco;
+//    - "Aguardar X segundo(s) e depois continuar" é um nó `delay` com
+//      delay: { type: "seconds", time: X } marcado como sequencial.
+//    (Os arquivos de referencia/ são cópias parciais: o Ctrl+C do editor só
+//     exporta os nós visíveis do quadro, então os filhos sequenciais não vêm
+//     junto — por isso, lá, o sonId/sequentialSonId da lista aponta para nós
+//     ausentes e o remove_tag aparece sem ninguém apontando para ele.)
 //    Cada linha (row) da lista aponta para o ramo do curso:
 //        action add_tag ["[NICOLE] - TIKTOK CLICOU /CURSOS"]
 //          ├─ curso de OUTRA conta → mensagem cta-url (wa.me/<fone>?text=<frase gatilho>)
@@ -37,6 +56,8 @@ export const CONFIG_TIKTOK = {
   tagsCondicionalClicou: ["[NICOLE] - TIKTOK CLICOU /CURSOS", 'clicou "/cursos" Tiktok'],
   tagRemoverNoFim: "Fluxo de inscrição",
   delayLembreteMinutos: 10,
+  // Espera entre uma lista e outra dentro do bloco ("Aguardar X segundo(s)").
+  esperaEntreListasSegundos: 1,
 
   textos: {
     corpoPrimeiraLista:
@@ -132,8 +153,18 @@ function baseNode(id, x, y) {
     },
     width: 272,
     height: 300,
-    selected: false,
+    // Os nós copiados do editor vêm sempre com selected: true (é o que o
+    // Ctrl+C exporta) — mantemos igual para o Ctrl+V achar tudo "normal".
+    selected: true,
   };
+}
+
+//  Move um nó (position, positionAbsolute e o pos serializado dentro de data).
+function posicionar(node, x, y) {
+  node.position = { x, y };
+  node.positionAbsolute = { x, y };
+  node.data.pos = JSON.stringify({ x, y });
+  return node;
 }
 
 function noAcaoTag(id, x, y, tipo, tags, sonId = null) {
@@ -260,6 +291,20 @@ function noDelayMinutos(id, x, y, minutos, sonId) {
     sendMessagesIntervalRangeType: "minutes",
   };
   node.height = 284;
+  return node;
+}
+
+//  "Aguardar X segundo(s) e depois continuar" — o passo de espera que aparece
+//  entre uma lista e outra dentro do bloco de mensagens.
+function noEsperaSegundos(id, x, y, segundos) {
+  const node = baseNode(id, x, y);
+  node.data.type = { id: "delay", tag: "delay", icon: "", color: "transparent" };
+  node.data.delay = {
+    type: "seconds",
+    time: segundos,
+    isComercialInterval: false,
+  };
+  node.height = 264;
   return node;
 }
 
@@ -407,27 +452,47 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK) {
   nodes.push(noCondicionalClicou(idCond, 1400, 3700, config.tagsCondicionalClicou, idLembrete));
   nodes.push(noTexto(idLembrete, 1400, 4250, t.lembrete));
 
-  // Cria os nós das listas com o encadeamento sequencial.
-  const nosListas = listas.map((lista, i) => noLista(novoId(), X_LISTA, 0, {
-    corpo: lista.corpo,
-    rodape: lista.rodape,
-    cta: t.botaoLista,
-    tituloSecao: preencher(t.tituloSecao, { semana: dataCurta(lista.semana) }),
-    linhas: lista.linhas,
-  }));
-  for (let i = 0; i < nosListas.length; i++) {
-    if (i + 1 < nosListas.length) {
-      nosListas[i].data.sequentialSonId = nosListas[i + 1].id;
-      nosListas[i + 1].data.sequentialFatherId = nosListas[i].id;
+  // Bloco único "Fluxo de mensagens": lista 1 → espera → lista 2 → espera → lista 3.
+  const Y_LISTA = 0;
+  const passos = [];
+  const segundosEspera = config.esperaEntreListasSegundos ?? 1;
+  listas.forEach((lista, i) => {
+    if (i > 0) passos.push(noEsperaSegundos(novoId(), X_LISTA, Y_LISTA, segundosEspera));
+    passos.push(noLista(novoId(), X_LISTA, Y_LISTA, {
+      corpo: lista.corpo,
+      rodape: lista.rodape,
+      cta: t.botaoLista,
+      tituloSecao: preencher(t.tituloSecao, { semana: dataCurta(lista.semana) }),
+      linhas: lista.linhas,
+    }));
+  });
+
+  const cabeca = passos[0];
+  for (let i = 0; i < passos.length; i++) {
+    const passo = passos[i];
+    const proximo = passos[i + 1] || null;
+
+    // Encadeamento do bloco: sonId leva ao passo seguinte; o último passo é
+    // quem entrega a saída do bloco (remove_tag → delay → condicional).
+    passo.data.sonId = proximo ? proximo.id : idRemove;
+    passo.data.sequentialSonId = proximo ? proximo.id : null;
+
+    if (i > 0) {
+      // Filho sequencial: desenhado dentro do cartão da cabeça, na mesma posição.
+      passo.data.sequential = true;
+      passo.data.sequentialFatherId = cabeca.id;
+      posicionar(passo, cabeca.position.x, cabeca.position.y);
     }
   }
-  // A saída do bloco de listas leva à cauda do lembrete.
-  nosListas[0].data.sonId = idRemove;
-  nodes.push(...nosListas);
+  // O cartão do bloco tem a altura de todos os passos somados (só cosmético —
+  // o editor recalcula ao desenhar).
+  cabeca.height = passos.reduce((soma, p) => soma + p.height, 0);
+  cabeca.width = 345;
+  nodes.push(...passos);
 
   // Entrada do fluxo.
   const idEntrada = novoId();
-  nodes.push(noAcaoTag(idEntrada, 900, 0, "add_tag", config.tagsEntrada, nosListas[0].id));
+  nodes.push(noAcaoTag(idEntrada, 900, 0, "add_tag", config.tagsEntrada, cabeca.id));
 
   return {
     fluxo: {
