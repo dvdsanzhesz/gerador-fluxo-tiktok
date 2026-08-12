@@ -17,6 +17,9 @@ import {
 
 const $ = (id) => document.getElementById(id);
 
+// Versão do gerador — aparece na tela pra sabermos qual arquivo está rodando.
+const VERSAO = 'v5';
+
 // ————— Regra do TikTok: quem já estava na semana anterior fica FORA —————
 // Um curso/congresso não entra no fluxo se:
 //  a) é reabertura pelo cadastro (campo `tipo` = 'reabertura' ou código com rN
@@ -220,7 +223,10 @@ async function buscarCursos() {
       status('❌ Nenhuma abertura encontrada para essas semanas.', 'error');
       return;
     }
-    status(`✅ ${total} curso(s) encontrado(s). Revise a seleção e gere o fluxo.`, 'success');
+    const foraTotal = estado.semanas.reduce(
+      (s, g) => s + g.aberturas.filter((a) => a._foraPorPadrao).length, 0
+    );
+    status(`✅ ${total} curso(s) encontrado(s) — ${foraTotal} fora por padrão (reabertura/semana anterior). [${VERSAO}]`, 'success');
     renderSelecao();
   } catch (e) {
     console.error('[Gerador TikTok]', e);
@@ -307,8 +313,8 @@ function gerar() {
     wrap.style.display = 'block';
     wrap.innerHTML = `
       <h2>Pronto!</h2>
-      <div class="status success">✅ Fluxo da ${pessoa.nome} gerado: ${resultado.totalCursos} curso(s),
-        ${resultado.totalSecoes} seção(ões) em 1 lista. Tags: ${pessoa.tagClicou}</div>
+      <div class="status success">✅ Fluxo da ${pessoa.nome} gerado: ${resultado.totalCursos} curso(s) em
+        ${resultado.totalListas} lista(s) encadeada(s), cada uma com seu texto. Tags: ${pessoa.tagClicou}</div>
       ${avisosHtml}
       <div class="acoes">
         <button id="tk-btn-copiar" class="btn btn-primario">📋 Copiar para colar no UnniChat</button>
@@ -346,6 +352,9 @@ function gerar() {
 
 //  ————— Boot —————
 function init() {
+  const badge = $('tk-versao');
+  if (badge) badge.textContent = `gerador ${VERSAO}`;
+
   initLogin();
 
   estado.modo = modoAutomatico();
