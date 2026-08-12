@@ -307,6 +307,25 @@ function noEncaminharAutomacao(id, x, y, nomeAutomacao) {
   return node;
 }
 
+// "Aguardar X segundo(s) e depois continuar" — usado DENTRO do bloco de
+// mensagens, entre uma lista e outra (igual ao fluxo original).
+function noDelaySegundos(id, x, y, segundos) {
+  const node = baseNode(id, x, y);
+  node.data.type = { id: "delay", tag: "delay", icon: "", color: "transparent" };
+  node.data.delay = {
+    type: "seconds",
+    time: segundos,
+    sendAt: null,
+    isComercialInterval: false,
+    commercialDays: null,
+    commercialTimeRange: null,
+    sendMessagesIntervalRange: [10, 201],
+    sendMessagesIntervalRangeType: "minutes",
+  };
+  node.height = 120;
+  return node;
+}
+
 function noDelayMinutos(id, x, y, minutos, sonId) {
   const node = baseNode(id, x, y);
   node.data.type = { id: "delay", tag: "delay", icon: "", color: "transparent" };
@@ -400,12 +419,14 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK, pessoa = PESS
       if (conta === config.contaFluxo) {
         // Curso da mesma conta do fluxo: encaminha para a automação de inscrição.
         idDestino = novoId();
-        const nomeAutomacao = `Fluxo ${dataCurta(grupo.semana)} - ${nome}`;
+        // Padrão real das automações no UnniChat:
+        // "Joelho: da Anatomia ao Tratamento - Inscrição - 17/08 (imported)"
+        const nomeAutomacao = `${nome} - Inscrição - ${dataCurta(grupo.semana)} (imported)`;
         nodes.push(noEncaminharAutomacao(idDestino, X_DESTINO, y, nomeAutomacao));
         avisos.push(
-          `"${nome}" é da conta ${conta || "?"} (mesma do fluxo): após colar, `
-          + `abra o nó "Encaminhar para automação" e selecione o fluxo de inscrição `
-          + `(${nomeAutomacao}).`
+          `"${nome}" (conta ${conta || "?"}): nó "Encaminhar para automação" gerado com o `
+          + `nome "${nomeAutomacao}" — confira no UnniChat se ficou vinculado; se não, `
+          + `selecione a automação com esse nome.`
         );
       } else {
         const fone = config.telefones[conta];
@@ -477,22 +498,37 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK, pessoa = PESS
     primeira = false;
   }
 
-  const idsListas = blocos.map(() => novoId());
+  // As listas ficam TODAS dentro de UM único bloco "Fluxo de mensagens",
+  // encadeadas em sequência (sequentialSonId/sequentialFatherId) com um
+  // "Aguardar X segundo(s)" entre uma lista e outra — igual ao fluxo original.
+  // Só o PAI do bloco carrega a saída (sonId) para a cauda do lembrete.
+  const cadeia = [];
   blocos.forEach((bloco, i) => {
-    nodes.push(noListaSemana(idsListas[i], X_LISTA, i * 1700, {
+    if (i > 0) {
+      cadeia.push(noDelaySegundos(novoId(), X_LISTA, 0, i === 1 ? 1 : 3));
+    }
+    cadeia.push(noListaSemana(novoId(), X_LISTA, 0, {
       corpo: bloco.corpo,
       rodape: bloco.rodape,
       cta: t.botaoLista,
       tituloSecao: bloco.tituloSecao,
       linhas: bloco.linhas,
-      // Última lista desemboca na cauda; as demais, na próxima lista.
-      sonId: i + 1 < idsListas.length ? idsListas[i + 1] : idRemove,
+      sonId: null,
     }));
   });
 
+  for (let i = 0; i < cadeia.length; i++) {
+    if (i + 1 < cadeia.length) {
+      cadeia[i].data.sequentialSonId = cadeia[i + 1].id;
+      cadeia[i + 1].data.sequentialFatherId = cadeia[i].id;
+    }
+  }
+  cadeia[0].data.sonId = idRemove; // saída do bloco inteiro -> cauda
+  nodes.push(...cadeia);
+
   // Entrada do fluxo.
   const idEntrada = novoId();
-  nodes.push(noAcaoTag(idEntrada, 100, 0, "add_tag", pessoa.tagsEntrada, idsListas[0]));
+  nodes.push(noAcaoTag(idEntrada, 100, 0, "add_tag", pessoa.tagsEntrada, cadeia[0].id));
 
   return {
     fluxo: {
