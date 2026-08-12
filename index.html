@@ -39,8 +39,8 @@
     .btn:disabled { opacity: .5; cursor: wait; }
     .modos { display: flex; gap: 10px; }
     .tk-modo { flex: 1; }
-    .tk-modo.ativo, .tk-pessoa.ativo { outline: 2px solid var(--verde); font-weight: 700; }
-    .tk-pessoa { flex: 1; }
+    .tk-modo.ativo, .tk-pessoa.ativo, .tk-formato.ativo { outline: 2px solid var(--verde); font-weight: 700; }
+    .tk-pessoa, .tk-formato { flex: 1; }
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
     .chip-semana { display: inline-block; margin: 4px 8px 4px 0; padding: 6px 10px;
@@ -119,6 +119,13 @@
             <label for="tk-data-ref">Data de referência (qualquer dia da semana atual)</label>
             <input type="date" id="tk-data-ref">
           </div>
+          <div>
+            <label>Formato da lista no WhatsApp</label>
+            <div class="modos">
+              <button type="button" class="btn tk-formato" data-formato="unica">1 mensagem só</button>
+              <button type="button" class="btn tk-formato" data-formato="semana">1 por semana</button>
+            </div>
+          </div>
         </div>
 
         <label>Semanas que entram no fluxo</label>
@@ -151,7 +158,7 @@
       box.textContent = '⚠️ Erro no site (me mande um print disto): ' + (e.reason && (e.reason.message || e.reason));
     });
   </script>
-  <!-- ?v=9 força o navegador a baixar a versão nova (anti-cache) -->
-  <script type="module" src="js/app.js?v=9"></script>
+  <!-- ?v=10 força o navegador a baixar a versão nova (anti-cache) -->
+  <script type="module" src="js/app.js?v=10"></script>
 </body>
 </html>
