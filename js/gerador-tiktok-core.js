@@ -115,10 +115,53 @@ function preencher(texto, valores) {
   return saida;
 }
 
+// O WhatsApp limita o título da linha da lista a 24 caracteres.
+// Em vez de cortar com "…", abrevia as palavras grandes (mantendo a última):
+// "Suplementação e Nutrição Esportiva" -> "Supl. e Nutr. Esportiva"
+const PALAVRAS_PEQUENAS = new Set([
+  "e", "de", "da", "do", "das", "dos", "a", "o", "à", "ao", "na", "no",
+  "nas", "nos", "em", "com", "para", "por", "y", "en", "la", "el",
+]);
+
 function tituloLinhaLista(nome) {
-  // O WhatsApp limita o título da linha da lista a 24 caracteres.
   const texto = String(nome || "").trim();
-  return texto.length <= 24 ? texto : `${texto.slice(0, 23)}…`;
+  if (texto.length <= 24) return texto;
+
+  const palavras = texto.split(/\s+/);
+
+  // Abrevia da maior pra menor quantidade de letras, preservando a última palavra.
+  for (let corte = 6; corte >= 3; corte--) {
+    const tentativa = palavras.map((p, i) => {
+      if (i === palavras.length - 1) return p;            // última fica inteira
+      if (PALAVRAS_PEQUENAS.has(p.toLowerCase())) return p; // "e", "de"... ficam
+      if (p.length <= corte + 1) return p;
+      return `${p.slice(0, corte)}.`;
+    }).join(" ");
+    if (tentativa.length <= 24) return tentativa;
+  }
+
+  // Nome muito longo: abrevia a última palavra também.
+  const tudoAbreviado = palavras.map((p) => {
+    if (PALAVRAS_PEQUENAS.has(p.toLowerCase())) return p;
+    return p.length > 5 ? `${p.slice(0, 4)}.` : p;
+  }).join(" ");
+  if (tudoAbreviado.length <= 24) return tudoAbreviado;
+
+  // Ainda não coube: remove as palavrinhas ("de", "da", "e", hífens...) e tenta de novo.
+  const soGrandes = palavras.filter(
+    (p) => !PALAVRAS_PEQUENAS.has(p.toLowerCase()) && /[a-zà-ú]/i.test(p)
+  );
+  for (let corte = 5; corte >= 3; corte--) {
+    const tentativa = soGrandes.map((p, i) => {
+      // Última palavra fica inteira enquanto der; no aperto máximo, abrevia também.
+      if (i === soGrandes.length - 1 && p.length <= 8 && corte > 3) return p;
+      if (p.length <= corte + 1) return p;
+      return `${p.slice(0, corte)}.`;
+    }).join(" ");
+    if (tentativa.length <= 24) return tentativa;
+  }
+
+  return `${tudoAbreviado.slice(0, 23)}…`;
 }
 
 export function identificarTipoEvento(abertura) {
