@@ -17,16 +17,44 @@ import {
 
 const $ = (id) => document.getElementById(id);
 
-// Reaberturas já rodaram em semana anterior e NÃO entram no fluxo do TikTok por padrão.
-// 1º) usa o campo `tipo` gravado na abertura pelo Hub ('abertura' | 'reabertura');
-// 2º) sem o campo (cadastros antigos), olha o código: só é reabertura se o rN do
-//     final vier depois de um NÚMERO (ex.: condir1r1 ✔; condir1 ✘ — o "r" é do nome).
+// ————— Regra do TikTok: quem já estava na semana anterior fica FORA —————
+// Um curso/congresso não entra no fluxo se:
+//  a) é reabertura pelo cadastro (campo `tipo` = 'reabertura' ou código com rN
+//     depois de um número, ex.: condir1r1 ✔ / condir1 ✘ — o "r" é do nome); OU
+//  b) o MESMO curso/edição também aparece nas aberturas da SEMANA ANTERIOR
+//     (é assim que pegamos os congressos de semana seguida, que no Hub não
+//     levam r1 nem tipo 'reabertura').
 function ehReabertura(abertura) {
   const tipo = String(abertura?.tipo || '').trim().toLowerCase();
   if (tipo === 'reabertura') return true;
-  if (tipo === 'abertura') return false;
   const codigo = String(abertura?.codigoAbertura || abertura?.id || '').trim();
   return /(?<=\d)r\d+$/i.test(codigo);
+}
+
+function normalizarChave(texto) {
+  return String(texto || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+// Identidades de uma abertura, para comparar entre semanas.
+function chavesAbertura(a) {
+  const chaves = [];
+  if (a?.cursoId) chaves.push(`curso:${normalizarChave(a.cursoId)}`);
+  if (a?.edicaoId) chaves.push(`edicao:${normalizarChave(a.edicaoId)}`);
+  const nome = normalizarChave(a?.nomeCurso);
+  if (nome) chaves.push(`nome:${nome}`);
+  const base = normalizarChave(a?.codigoAbertura || a?.id).replace(/(?<=\d)r\d+$/i, '');
+  if (base) chaves.push(`codigo:${base}`);
+  return chaves;
+}
+
+function semanaAnteriorDe(semana) {
+  const [d, m, a] = String(semana || '').split('/').map(Number);
+  const data = new Date(a, m - 1, d - 7);
+  const dd = String(data.getDate()).padStart(2, '0');
+  const mm = String(data.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${data.getFullYear()}`;
 }
 
 const estado = {
@@ -146,15 +174,41 @@ async function buscarCursos() {
 
   try {
     estado.semanas = [];
+
+    // Busca cada semana só uma vez (as semanas do fluxo + a anterior de cada uma).
+    const cacheSemanas = new Map();
+    const obterSemana = async (sem) => {
+      if (!cacheSemanas.has(sem)) {
+        cacheSemanas.set(sem, await buscarAberturasPorSemana(sem, 'normal'));
+      }
+      return cacheSemanas.get(sem);
+    };
+
     for (const def of defs) {
-      const aberturas = await buscarAberturasPorSemana(def.semana, 'normal');
+      const aberturas = await obterSemana(def.semana);
+
+      // Identidades de tudo que rodou na SEMANA ANTERIOR.
+      const anteriores = await obterSemana(semanaAnteriorDe(def.semana));
+      const chavesAnterior = new Set();
+      for (const ant of anteriores) {
+        for (const chave of chavesAbertura(ant)) chavesAnterior.add(chave);
+      }
+
+      // Marca cada abertura: fora por padrão se é reabertura OU repete a semana anterior.
+      for (const a of aberturas) {
+        const repetida = chavesAbertura(a).some((chave) => chavesAnterior.has(chave));
+        a._foraPorPadrao = ehReabertura(a) || repetida;
+        a._motivoFora = ehReabertura(a)
+          ? '🔁 reabertura'
+          : (repetida ? '↩️ já estava na semana anterior' : '');
+      }
+
       estado.semanas.push({
         ...def,
         aberturas,
-        // Reaberturas (r1, r2...) começam desmarcadas — não vão pro fluxo do TikTok.
         selecionados: new Set(
           aberturas
-            .filter((a) => !ehReabertura(a))
+            .filter((a) => !a._foraPorPadrao)
             .map((a) => (a.nomeCurso || '').trim())
             .filter(Boolean)
         ),
@@ -202,11 +256,11 @@ function renderSelecao() {
     grupo.aberturas.forEach((abertura) => {
       const nome = (abertura.nomeCurso || '').trim();
       if (!nome) return;
-      const reabertura = ehReabertura(abertura);
+      const fora = Boolean(abertura._foraPorPadrao);
       const chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = reabertura ? 'chip' : 'chip ativo';
-      chip.textContent = `${nome} · ${abertura.contaAPI || 'sem conta'}${reabertura ? ' · 🔁 reabertura (fora por padrão)' : ''}`;
+      chip.className = fora ? 'chip' : 'chip ativo';
+      chip.textContent = `${nome} · ${abertura.contaAPI || 'sem conta'}${fora ? ` · ${abertura._motivoFora} (fora por padrão)` : ''}`;
       chip.addEventListener('click', () => {
         if (grupo.selecionados.has(nome)) {
           grupo.selecionados.delete(nome);
