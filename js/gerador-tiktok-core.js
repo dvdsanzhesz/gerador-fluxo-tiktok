@@ -35,11 +35,15 @@ export const CONFIG_TIKTOK = {
   delayLembreteMinutos: 10,
 
   textos: {
-    corpoLista:
+    corpoPrimeiraLista:
       "Olá! Que bom saber que você está querendo se aprimorar. Parabéns pelo primeiro passo!\n\n"
       + "Temos muitos cursos que estão gratuitos.\n\n"
       + "O próximo passo é escolher qual curso vai fazer:",
-    rodapeLista: "Estes cursos terão aulas entre {inicio} e {fim}",
+    corpoOutrasListas:
+      "E aqui tem mais alguns cursos com inscrições abertas...\n\n"
+      + "Estes ocorrerão na semana {semana}👇",
+    rodapePrimeiraLista: "Estes cursos terão aulas entre {inicio} e {fim}",
+    rodapeOutrasListas: "Aulas entre {inicio} e {fim}",
     tituloSecao: "Cursos que começam {semana}",
     botaoLista: "Clique aqui",
     corpoCtaCongresso: "Boa escolha! Para se inscrever em {nome}, clique no botão abaixo👇",
@@ -203,24 +207,24 @@ function mensagemBase() {
   };
 }
 
-//  UMA mensagem de lista com VÁRIAS seções (uma por semana).
-//  secoes: [{ titulo, linhas: [{ titulo, sonId }] }]
-function noListaMultiSecoes(id, x, y, { corpo, rodape, cta, secoes, sonId }) {
+//  Mensagem de lista de UMA semana (texto próprio + uma seção com os cursos).
+//  As listas das semanas são ligadas em corrente pelo sonId (conexão normal,
+//  que comprovadamente sobrevive ao colar no UnniChat).
+function noListaSemana(id, x, y, { corpo, rodape, cta, tituloSecao, linhas, sonId }) {
   const node = baseNode(id, x, y);
   node.data.type = { id: "message", tag: "message", icon: "", color: "transparent" };
   node.data.sonId = sonId;
   const msg = mensagemBase();
   msg.messageType = "message-list";
   msg.listComponents = { body: corpo, footer: rodape, cta };
-  msg.sections = secoes.map((secao) => ({
+  msg.sections = [{
     id: novoId(),
-    title: secao.titulo,
-    rows: secao.linhas.map(({ titulo, sonId: alvo }) => ({ id: novoId(), title: titulo, sonId: alvo })),
-  }));
+    title: tituloSecao,
+    rows: linhas.map(({ titulo, sonId: alvo }) => ({ id: novoId(), title: titulo, sonId: alvo })),
+  }];
   node.data.message = msg;
   node.width = 345;
-  const totalLinhas = secoes.reduce((s, sec) => s + sec.linhas.length, 0);
-  node.height = 700 + totalLinhas * 60 + secoes.length * 80;
+  node.height = 800 + linhas.length * 60;
   return node;
 }
 
@@ -390,19 +394,11 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK, pessoa = PESS
     }
     if (linhas.length) {
       secoes.push({
+        semana: grupo.semana,
         titulo: preencher(t.tituloSecao, { semana: dataCurta(grupo.semana) }),
         linhas,
       });
     }
-  }
-
-  const totalLinhas = secoes.reduce((s, sec) => s + sec.linhas.length, 0);
-  if (totalLinhas > 10) {
-    avisos.push(
-      `A lista ficou com ${totalLinhas} cursos no total. O WhatsApp oficialmente `
-      + `aceita até 10 itens por mensagem de lista — se o envio falhar, reduza a `
-      + `seleção de cursos ou divida em dois disparos.`
-    );
   }
 
   // Cauda: remove tag -> delay -> condicional -> lembrete p/ quem não clicou
@@ -411,29 +407,50 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK, pessoa = PESS
   const idCond = novoId();
   const idLembrete = novoId();
 
-  nodes.push(noAcaoTag(idRemove, X_LISTA - 100, 2600, "remove_tag", [config.tagRemoverNoFim], idDelay));
-  nodes.push(noDelayMinutos(idDelay, X_LISTA - 100, 2950, config.delayLembreteMinutos, idCond));
-  nodes.push(noCondicionalClicou(idCond, X_LISTA - 100, 3300, pessoa.tagsCondicionalClicou, idLembrete));
-  nodes.push(noTexto(idLembrete, X_LISTA - 100, 3850, t.lembrete));
+  nodes.push(noAcaoTag(idRemove, X_LISTA - 100, 5200, "remove_tag", [config.tagRemoverNoFim], idDelay));
+  nodes.push(noDelayMinutos(idDelay, X_LISTA - 100, 5550, config.delayLembreteMinutos, idCond));
+  nodes.push(noCondicionalClicou(idCond, X_LISTA - 100, 5900, pessoa.tagsCondicionalClicou, idLembrete));
+  nodes.push(noTexto(idLembrete, X_LISTA - 100, 6450, t.lembrete));
 
-  // UMA ÚNICA mensagem de lista com todas as seções, já ligada na cauda.
-  const primeiraSemana = semanasComCursos[0].semana;
-  const ultimaSemana = semanasComCursos[semanasComCursos.length - 1].semana;
-  const idLista = novoId();
-  nodes.push(noListaMultiSecoes(idLista, X_LISTA, 0, {
-    corpo: t.corpoLista,
-    rodape: preencher(t.rodapeLista, {
-      inicio: dataCurta(primeiraSemana),
-      fim: sextaDaSemana(ultimaSemana),
-    }),
-    cta: t.botaoLista,
-    secoes,
-    sonId: idRemove,
-  }));
+  // UMA mensagem de lista POR SEMANA, cada uma com seu texto próprio, ligadas
+  // em corrente pela conexão normal (sonId): lista1 -> lista2 -> ... -> cauda.
+  // O WhatsApp permite no máximo 10 linhas por lista: semanas maiores são
+  // quebradas em mais de uma mensagem (mesmo texto de continuação).
+  const blocos = [];
+  let primeira = true;
+  for (const secao of secoes) {
+    for (let i = 0; i < secao.linhas.length; i += 10) {
+      const ehPrimeira = primeira && i === 0;
+      blocos.push({
+        corpo: ehPrimeira
+          ? t.corpoPrimeiraLista
+          : preencher(t.corpoOutrasListas, { semana: dataCurta(secao.semana) }),
+        rodape: ehPrimeira
+          ? preencher(t.rodapePrimeiraLista, { inicio: dataCurta(secao.semana), fim: sextaDaSemana(secao.semana) })
+          : preencher(t.rodapeOutrasListas, { inicio: dataCurta(secao.semana), fim: sextaDaSemana(secao.semana) }),
+        tituloSecao: secao.titulo,
+        linhas: secao.linhas.slice(i, i + 10),
+      });
+    }
+    primeira = false;
+  }
+
+  const idsListas = blocos.map(() => novoId());
+  blocos.forEach((bloco, i) => {
+    nodes.push(noListaSemana(idsListas[i], X_LISTA, i * 1700, {
+      corpo: bloco.corpo,
+      rodape: bloco.rodape,
+      cta: t.botaoLista,
+      tituloSecao: bloco.tituloSecao,
+      linhas: bloco.linhas,
+      // Última lista desemboca na cauda; as demais, na próxima lista.
+      sonId: i + 1 < idsListas.length ? idsListas[i + 1] : idRemove,
+    }));
+  });
 
   // Entrada do fluxo.
   const idEntrada = novoId();
-  nodes.push(noAcaoTag(idEntrada, 100, 0, "add_tag", pessoa.tagsEntrada, idLista));
+  nodes.push(noAcaoTag(idEntrada, 100, 0, "add_tag", pessoa.tagsEntrada, idsListas[0]));
 
   return {
     fluxo: {
@@ -445,7 +462,7 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK, pessoa = PESS
     idEntrada,
     avisos,
     totalCursos: indiceRamo,
-    totalListas: 1,
+    totalListas: blocos.length,
     totalSecoes: secoes.length,
   };
 }
