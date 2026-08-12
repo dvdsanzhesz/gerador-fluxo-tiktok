@@ -7,18 +7,21 @@ import {
   signOut,
 } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { buscarAberturasPorSemana } from './gerador-fluxos-dados.js';
+// O ?v= no fim também força o navegador a baixar a versão NOVA deste arquivo.
+// (Sem isso, o app.js atualizava mas o core continuava em cache — bug clássico.)
 import {
   montarFluxoTiktok,
   identificarTipoEvento,
   dataCurta,
   CONFIG_TIKTOK,
   PESSOAS,
-} from './gerador-tiktok-core.js';
+  VERSAO_CORE,
+} from './gerador-tiktok-core.js?v=10';
 
 const $ = (id) => document.getElementById(id);
 
 // Versão do gerador — aparece na tela pra sabermos qual arquivo está rodando.
-const VERSAO = 'v9';
+const VERSAO = 'v10';
 
 // ————— Regra do TikTok: quem já estava na semana anterior fica FORA —————
 // Um curso/congresso não entra no fluxo se:
@@ -71,6 +74,7 @@ function semanaAnteriorDe(semana) {
 const estado = {
   modo: null,
   pessoa: 'nicole',   // "nicole" | "alyne" — muda somente as tags do fluxo
+  formato: 'unica',   // "unica" = tudo numa mensagem/seção | "semana" = uma por semana
   referencia: null,
   semanas: [],
   resultado: null,
@@ -162,6 +166,10 @@ function renderControles() {
 
   document.querySelectorAll('.tk-pessoa').forEach((btn) => {
     btn.classList.toggle('ativo', btn.dataset.pessoa === estado.pessoa);
+  });
+
+  document.querySelectorAll('.tk-formato').forEach((btn) => {
+    btn.classList.toggle('ativo', btn.dataset.formato === estado.formato);
   });
 
   $('tk-semanas-preview').innerHTML = semanasDoModo(estado.modo, base)
@@ -317,7 +325,7 @@ function gerar() {
       .filter((g) => g.cursos.length);
 
     const pessoa = PESSOAS[estado.pessoa] || PESSOAS.nicole;
-    const resultado = montarFluxoTiktok(semanas, CONFIG_TIKTOK, pessoa);
+    const resultado = montarFluxoTiktok(semanas, CONFIG_TIKTOK, pessoa, { formato: estado.formato });
     estado.resultado = resultado;
 
     const avisosHtml = resultado.avisos.length
@@ -368,8 +376,13 @@ function gerar() {
 
 //  ————— Boot —————
 function init() {
+  // Mostra as DUAS versões: se uma delas ficar pra trás, é cache do navegador.
   const badge = $('tk-versao');
-  if (badge) badge.textContent = `gerador ${VERSAO}`;
+  if (badge) {
+    const igual = VERSAO === VERSAO_CORE;
+    badge.textContent = `${VERSAO} · core ${VERSAO_CORE}${igual ? '' : ' ⚠️ CACHE!'}`;
+    badge.style.color = igual ? '' : '#ffb4b4';
+  }
 
   initLogin();
 
@@ -386,6 +399,13 @@ function init() {
   document.querySelectorAll('.tk-pessoa').forEach((btn) => {
     btn.addEventListener('click', () => {
       estado.pessoa = btn.dataset.pessoa;
+      renderControles();
+    });
+  });
+
+  document.querySelectorAll('.tk-formato').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      estado.formato = btn.dataset.formato;
       renderControles();
     });
   });
