@@ -91,6 +91,7 @@
         <h1>⚓ Gerador do Fluxo "/cursos" do TikTok
           <small>Segunda: semana atual + divulgações · Quarta: só divulgações</small></h1>
         <div class="usuario">
+          <span id="tk-versao" style="opacity:.6"></span>
           <span id="usuario-logado"></span>
           <button id="btn-sair" class="btn">Sair</button>
         </div>
@@ -150,6 +151,7 @@
       box.textContent = '⚠️ Erro no site (me mande um print disto): ' + (e.reason && (e.reason.message || e.reason));
     });
   </script>
-  <script type="module" src="js/app.js"></script>
+  <!-- ?v=5 força o navegador a baixar a versão nova (anti-cache) -->
+  <script type="module" src="js/app.js?v=5"></script>
 </body>
 </html>
