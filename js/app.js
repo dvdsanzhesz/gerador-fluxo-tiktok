@@ -12,12 +12,14 @@ import {
   identificarTipoEvento,
   dataCurta,
   CONFIG_TIKTOK,
+  PESSOAS,
 } from './gerador-tiktok-core.js';
 
 const $ = (id) => document.getElementById(id);
 
 const estado = {
   modo: null,
+  pessoa: 'nicole',
   referencia: null,
   semanas: [],
   resultado: null,
@@ -97,6 +99,10 @@ function renderControles() {
 
   document.querySelectorAll('.tk-modo').forEach((btn) => {
     btn.classList.toggle('ativo', btn.dataset.modo === estado.modo);
+  });
+
+  document.querySelectorAll('.tk-pessoa').forEach((btn) => {
+    btn.classList.toggle('ativo', btn.dataset.pessoa === estado.pessoa);
   });
 
   $('tk-semanas-preview').innerHTML = semanasDoModo(estado.modo, base)
@@ -207,7 +213,8 @@ function gerar() {
       }))
       .filter((g) => g.cursos.length);
 
-    const resultado = montarFluxoTiktok(semanas, CONFIG_TIKTOK);
+    const pessoa = PESSOAS[estado.pessoa] || PESSOAS.nicole;
+    const resultado = montarFluxoTiktok(semanas, CONFIG_TIKTOK, pessoa);
     estado.resultado = resultado;
 
     const avisosHtml = resultado.avisos.length
@@ -219,17 +226,18 @@ function gerar() {
     wrap.style.display = 'block';
     wrap.innerHTML = `
       <h2>Pronto!</h2>
-      <div class="status success">✅ Fluxo gerado: ${resultado.totalCursos} curso(s) em
-        ${resultado.totalListas} lista(s).</div>
+      <div class="status success">✅ Fluxo da <strong>${pessoa.nome}</strong> gerado:
+        ${resultado.totalCursos} curso(s) em ${resultado.totalListas} lista(s).<br>
+        Tag de entrada: <code>${pessoa.tagsEntrada[pessoa.tagsEntrada.length - 1]}</code></div>
       ${avisosHtml}
       <div class="acoes">
         <button id="tk-btn-copiar" class="btn btn-primario">📋 Copiar para colar no UnniChat</button>
         <button id="tk-btn-baixar" class="btn">⬇️ Baixar .json</button>
       </div>
-      <p class="hint">No UnniChat: abra o fluxo "/cursos" do TikTok, apague os nós antigos
-        (menos o gatilho inicial), clique no quadro e cole (Ctrl+V). Depois ligue o gatilho
-        inicial ao nó de entrada (o que adiciona as tags "Fluxo de inscrição" +
-        "[NICOLE] - TIKTOK /CURSOS").</p>
+      <p class="hint">No UnniChat: abra o fluxo "/cursos" do TikTok da ${pessoa.nome}, apague os
+        nós antigos (menos o gatilho inicial), clique no quadro e cole (Ctrl+V). Depois ligue o
+        gatilho inicial ao nó de entrada (o que adiciona as tags
+        ${pessoa.tagsEntrada.map((tag) => `"${tag}"`).join(' + ')}).</p>
     `;
 
     const jsonTexto = JSON.stringify(resultado.fluxo);
@@ -244,7 +252,7 @@ function gerar() {
     });
 
     $('tk-btn-baixar').addEventListener('click', () => {
-      const nome = `fluxo_tiktok_${estado.modo}_${dataCurta(estado.semanas[0].semana).split('/').join('-')}.json`;
+      const nome = `fluxo_tiktok_${estado.pessoa}_${estado.modo}_${dataCurta(estado.semanas[0].semana).split('/').join('-')}.json`;
       const blob = new Blob([JSON.stringify(resultado.fluxo, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       Object.assign(document.createElement('a'), { href: url, download: nome }).click();
@@ -266,6 +274,13 @@ function init() {
   document.querySelectorAll('.tk-modo').forEach((btn) => {
     btn.addEventListener('click', () => {
       estado.modo = btn.dataset.modo;
+      renderControles();
+    });
+  });
+
+  document.querySelectorAll('.tk-pessoa').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      estado.pessoa = btn.dataset.pessoa;
       renderControles();
     });
   });
