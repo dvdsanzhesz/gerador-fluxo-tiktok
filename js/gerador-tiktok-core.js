@@ -3,34 +3,15 @@
 //  de fluxos do UnniChat (mesmo formato obtido ao selecionar os nós e
 //  copiar com Ctrl+C).
 //
-//  Estrutura reproduzida do fluxo feito à mão pela equipe:
+//  Estrutura gerada:
 //    [entrada]  action add_tag ["Fluxo de inscrição", "[NICOLE] - TIKTOK /CURSOS"]
-//        └─> BLOCO ÚNICO "Fluxo de mensagens" (um só cartão no quadro):
-//              1. lista de cursos da 1ª semana (message-list)   ← cabeça do bloco
-//              2. espera de 1 segundo (delay type "seconds")    ┐
-//              3. lista da 2ª semana                            │ filhos sequenciais:
-//              4. espera de 1 segundo                           │ sequential: true +
-//              5. lista da 3ª semana (só na segunda-feira)      ┘ mesma posição da cabeça
-//              └─> (saída, no ÚLTIMO passo do bloco) remove_tag "Fluxo de inscrição"
+//        └─> UMA ÚNICA mensagem de lista (message-list) com VÁRIAS SEÇÕES,
+//            uma seção por semana ("Cursos que começam DD/MM"), e cada linha
+//            apontando para o ramo do curso.
+//              └─ (saída) remove_tag "Fluxo de inscrição"
 //                    └─> delay 10 min
 //                          └─> condicional "clicou?" — se NÃO clicou, lembrete
-//
-//  Como o UnniChat representa um bloco de mensagens sequenciais (confirmado nos
-//  fluxos reais exportados pelo Hub, ex.: public/templates/esqueleto_fluxo_*.json):
-//    - os passos do bloco são nós normais, encadeados pelo sonId comum
-//      (cabeça.sonId -> passo2.id -> passo3.id -> ... -> último.sonId = saída);
-//    - todo passo depois da cabeça carrega `sequential: true` (é isso que faz o
-//      editor desenhar o passo DENTRO do cartão do pai em vez de um cartão solto)
-//      + `sequentialFatherId` apontando para a cabeça do bloco, e fica na MESMA
-//      posição da cabeça;
-//    - a cabeça também guarda `sequentialSonId` = próximo passo do bloco;
-//    - "Aguardar X segundo(s) e depois continuar" é um nó `delay` com
-//      delay: { type: "seconds", time: X } marcado como sequencial.
-//    (Os arquivos de referencia/ são cópias parciais: o Ctrl+C do editor só
-//     exporta os nós visíveis do quadro, então os filhos sequenciais não vêm
-//     junto — por isso, lá, o sonId/sequentialSonId da lista aponta para nós
-//     ausentes e o remove_tag aparece sem ninguém apontando para ele.)
-//    Cada linha (row) da lista aponta para o ramo do curso:
+//    Ramo de cada curso:
 //        action add_tag ["[NICOLE] - TIKTOK CLICOU /CURSOS"]
 //          ├─ curso de OUTRA conta → mensagem cta-url (wa.me/<fone>?text=<frase gatilho>)
 //          └─ curso da MESMA conta do fluxo → nó "Encaminhar para automação"
@@ -56,19 +37,13 @@ export const CONFIG_TIKTOK = {
   tagsCondicionalClicou: ["[NICOLE] - TIKTOK CLICOU /CURSOS", 'clicou "/cursos" Tiktok'],
   tagRemoverNoFim: "Fluxo de inscrição",
   delayLembreteMinutos: 10,
-  // Espera entre uma lista e outra dentro do bloco ("Aguardar X segundo(s)").
-  esperaEntreListasSegundos: 1,
 
   textos: {
-    corpoPrimeiraLista:
+    corpoLista:
       "Olá! Que bom saber que você está querendo se aprimorar. Parabéns pelo primeiro passo!\n\n"
       + "Temos muitos cursos que estão gratuitos.\n\n"
       + "O próximo passo é escolher qual curso vai fazer:",
-    corpoOutrasListas:
-      "E aqui tem mais alguns cursos com inscrições abertas...\n\n"
-      + "Estes ocorrerão na semana {semana}👇",
-    rodapePrimeiraLista: "Estes cursos terão aulas entre {inicio} e {fim}",
-    rodapeOutrasListas: "Aulas entre {inicio} e {fim}",
+    rodapeLista: "Estes cursos terão aulas entre {inicio} e {fim}",
     tituloSecao: "Cursos que começam {semana}",
     botaoLista: "Clique aqui",
     corpoCtaCongresso: "Boa escolha! Para se inscrever em {nome}, clique no botão abaixo👇",
@@ -153,18 +128,9 @@ function baseNode(id, x, y) {
     },
     width: 272,
     height: 300,
-    // Os nós copiados do editor vêm sempre com selected: true (é o que o
-    // Ctrl+C exporta) — mantemos igual para o Ctrl+V achar tudo "normal".
     selected: true,
+    dragging: false,
   };
-}
-
-//  Move um nó (position, positionAbsolute e o pos serializado dentro de data).
-function posicionar(node, x, y) {
-  node.position = { x, y };
-  node.positionAbsolute = { x, y };
-  node.data.pos = JSON.stringify({ x, y });
-  return node;
 }
 
 function noAcaoTag(id, x, y, tipo, tags, sonId = null) {
@@ -223,20 +189,24 @@ function mensagemBase() {
   };
 }
 
-function noLista(id, x, y, { corpo, rodape, cta, tituloSecao, linhas }) {
+//  UMA mensagem de lista com VÁRIAS seções (uma por semana).
+//  secoes: [{ titulo, linhas: [{ titulo, sonId }] }]
+function noListaMultiSecoes(id, x, y, { corpo, rodape, cta, secoes, sonId }) {
   const node = baseNode(id, x, y);
   node.data.type = { id: "message", tag: "message", icon: "", color: "transparent" };
+  node.data.sonId = sonId;
   const msg = mensagemBase();
   msg.messageType = "message-list";
   msg.listComponents = { body: corpo, footer: rodape, cta };
-  msg.sections = [{
+  msg.sections = secoes.map((secao) => ({
     id: novoId(),
-    title: tituloSecao,
-    rows: linhas.map(({ titulo, sonId }) => ({ id: novoId(), title: titulo, sonId })),
-  }];
+    title: secao.titulo,
+    rows: secao.linhas.map(({ titulo, sonId: alvo }) => ({ id: novoId(), title: titulo, sonId: alvo })),
+  }));
   node.data.message = msg;
   node.width = 345;
-  node.height = 900 + linhas.length * 60;
+  const totalLinhas = secoes.reduce((s, sec) => s + sec.linhas.length, 0);
+  node.height = 700 + totalLinhas * 60 + secoes.length * 80;
   return node;
 }
 
@@ -294,20 +264,6 @@ function noDelayMinutos(id, x, y, minutos, sonId) {
   return node;
 }
 
-//  "Aguardar X segundo(s) e depois continuar" — o passo de espera que aparece
-//  entre uma lista e outra dentro do bloco de mensagens.
-function noEsperaSegundos(id, x, y, segundos) {
-  const node = baseNode(id, x, y);
-  node.data.type = { id: "delay", tag: "delay", icon: "", color: "transparent" };
-  node.data.delay = {
-    type: "seconds",
-    time: segundos,
-    isComercialInterval: false,
-  };
-  node.height = 264;
-  return node;
-}
-
 function noCondicionalClicou(id, x, y, tags, falseId) {
   const node = baseNode(id, x, y);
   node.data.type = { id: "conditionalV2", tag: "conditionalV2", icon: "", color: "transparent" };
@@ -341,23 +297,29 @@ function noCondicionalClicou(id, x, y, tags, falseId) {
 
 //  ————— Montagem do fluxo —————
 //  semanas: [{ semana: "DD/MM/YYYY", cursos: [{ nomeCurso, tipoEvento, contaAPI, nomeWhatsapp }] }]
-//  A 1ª semana do array vira a 1ª lista. Segunda-feira: [atual, +7, +14]. Quarta: [+7, +14].
+//  Segunda-feira: [atual, +7, +14]. Quarta: [+7, +14].
+//  Gera UMA ÚNICA mensagem de lista com uma seção por semana.
 export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK) {
   const nodes = [];
   const avisos = [];
   const t = config.textos;
 
-  const X_LISTA = 1500;
-  const X_RAMOS = 2600;
+  const X_LISTA = 600;
+  const X_RAMOS = 1400;
   const LARGURA_RAMO = 360;
   const RAMOS_POR_LINHA = 6;
   const ALTURA_RAMO = 760;
 
-  // Ramos por curso (criados antes para termos os IDs nas linhas das listas)
+  // Ramos por curso (criados antes para termos os IDs nas linhas da lista)
   let indiceRamo = 0;
-  const linhasPorSemana = [];
+  const secoes = [];
 
-  for (const grupo of semanas) {
+  const semanasComCursos = (semanas || []).filter((g) => (g.cursos || []).length);
+  if (!semanasComCursos.length) {
+    throw new Error("Nenhum curso para gerar — verifique as semanas selecionadas.");
+  }
+
+  for (const grupo of semanasComCursos) {
     const linhas = [];
     for (const curso of grupo.cursos) {
       const nome = String(curso.nomeCurso || "").trim();
@@ -380,7 +342,7 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK) {
         const nomeAutomacao = `Fluxo ${dataCurta(grupo.semana)} - ${nome}`;
         nodes.push(noEncaminharAutomacao(idDestino, x, y + 360, nomeAutomacao));
         avisos.push(
-          `"${nome}" é da conta ${conta || "?"} (mesma do fluxo): após importar, `
+          `"${nome}" é da conta ${conta || "?"} (mesma do fluxo): após colar, `
           + `abra o nó "Encaminhar para automação" e selecione o fluxo de inscrição `
           + `(${nomeAutomacao}).`
         );
@@ -411,34 +373,21 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK) {
         avisos.push(`"${nome}" tem mais de 24 caracteres — o título na lista ficou "${tituloLinhaLista(nome)}".`);
       }
     }
-    linhasPorSemana.push({ semana: grupo.semana, linhas });
-  }
-
-  // Listas por semana (encadeadas em sequência dentro do mesmo bloco visual).
-  // O WhatsApp permite no máximo 10 linhas por mensagem de lista: quebramos em blocos.
-  const listas = [];
-  let primeira = true;
-  for (const { semana, linhas } of linhasPorSemana) {
-    if (!linhas.length) continue;
-    for (let i = 0; i < linhas.length; i += 10) {
-      const bloco = linhas.slice(i, i + 10);
-      const ehPrimeiraLista = primeira && i === 0;
-      listas.push({
-        semana,
-        linhas: bloco,
-        corpo: ehPrimeiraLista
-          ? t.corpoPrimeiraLista
-          : preencher(t.corpoOutrasListas, { semana: dataCurta(semana) }),
-        rodape: ehPrimeiraLista
-          ? preencher(t.rodapePrimeiraLista, { inicio: dataCurta(semana), fim: sextaDaSemana(semana) })
-          : preencher(t.rodapeOutrasListas, { inicio: dataCurta(semana), fim: sextaDaSemana(semana) }),
+    if (linhas.length) {
+      secoes.push({
+        titulo: preencher(t.tituloSecao, { semana: dataCurta(grupo.semana) }),
+        linhas,
       });
     }
-    primeira = false;
   }
 
-  if (!listas.length) {
-    throw new Error("Nenhum curso para gerar — verifique as semanas selecionadas.");
+  const totalLinhas = secoes.reduce((s, sec) => s + sec.linhas.length, 0);
+  if (totalLinhas > 10) {
+    avisos.push(
+      `A lista ficou com ${totalLinhas} cursos no total. O WhatsApp oficialmente `
+      + `aceita até 10 itens por mensagem de lista — se o envio falhar, reduza a `
+      + `seleção de cursos ou divida em dois disparos.`
+    );
   }
 
   // Cauda: remove tag -> delay -> condicional -> lembrete p/ quem não clicou
@@ -447,52 +396,29 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK) {
   const idCond = novoId();
   const idLembrete = novoId();
 
-  nodes.push(noAcaoTag(idRemove, 1400, 3000, "remove_tag", [config.tagRemoverNoFim], idDelay));
-  nodes.push(noDelayMinutos(idDelay, 1400, 3350, config.delayLembreteMinutos, idCond));
-  nodes.push(noCondicionalClicou(idCond, 1400, 3700, config.tagsCondicionalClicou, idLembrete));
-  nodes.push(noTexto(idLembrete, 1400, 4250, t.lembrete));
+  nodes.push(noAcaoTag(idRemove, X_LISTA - 100, 2600, "remove_tag", [config.tagRemoverNoFim], idDelay));
+  nodes.push(noDelayMinutos(idDelay, X_LISTA - 100, 2950, config.delayLembreteMinutos, idCond));
+  nodes.push(noCondicionalClicou(idCond, X_LISTA - 100, 3300, config.tagsCondicionalClicou, idLembrete));
+  nodes.push(noTexto(idLembrete, X_LISTA - 100, 3850, t.lembrete));
 
-  // Bloco único "Fluxo de mensagens": lista 1 → espera → lista 2 → espera → lista 3.
-  const Y_LISTA = 0;
-  const passos = [];
-  const segundosEspera = config.esperaEntreListasSegundos ?? 1;
-  listas.forEach((lista, i) => {
-    if (i > 0) passos.push(noEsperaSegundos(novoId(), X_LISTA, Y_LISTA, segundosEspera));
-    passos.push(noLista(novoId(), X_LISTA, Y_LISTA, {
-      corpo: lista.corpo,
-      rodape: lista.rodape,
-      cta: t.botaoLista,
-      tituloSecao: preencher(t.tituloSecao, { semana: dataCurta(lista.semana) }),
-      linhas: lista.linhas,
-    }));
-  });
-
-  const cabeca = passos[0];
-  for (let i = 0; i < passos.length; i++) {
-    const passo = passos[i];
-    const proximo = passos[i + 1] || null;
-
-    // Encadeamento do bloco: sonId leva ao passo seguinte; o último passo é
-    // quem entrega a saída do bloco (remove_tag → delay → condicional).
-    passo.data.sonId = proximo ? proximo.id : idRemove;
-    passo.data.sequentialSonId = proximo ? proximo.id : null;
-
-    if (i > 0) {
-      // Filho sequencial: desenhado dentro do cartão da cabeça, na mesma posição.
-      passo.data.sequential = true;
-      passo.data.sequentialFatherId = cabeca.id;
-      posicionar(passo, cabeca.position.x, cabeca.position.y);
-    }
-  }
-  // O cartão do bloco tem a altura de todos os passos somados (só cosmético —
-  // o editor recalcula ao desenhar).
-  cabeca.height = passos.reduce((soma, p) => soma + p.height, 0);
-  cabeca.width = 345;
-  nodes.push(...passos);
+  // UMA ÚNICA mensagem de lista com todas as seções, já ligada na cauda.
+  const primeiraSemana = semanasComCursos[0].semana;
+  const ultimaSemana = semanasComCursos[semanasComCursos.length - 1].semana;
+  const idLista = novoId();
+  nodes.push(noListaMultiSecoes(idLista, X_LISTA, 0, {
+    corpo: t.corpoLista,
+    rodape: preencher(t.rodapeLista, {
+      inicio: dataCurta(primeiraSemana),
+      fim: sextaDaSemana(ultimaSemana),
+    }),
+    cta: t.botaoLista,
+    secoes,
+    sonId: idRemove,
+  }));
 
   // Entrada do fluxo.
   const idEntrada = novoId();
-  nodes.push(noAcaoTag(idEntrada, 900, 0, "add_tag", config.tagsEntrada, cabeca.id));
+  nodes.push(noAcaoTag(idEntrada, 100, 0, "add_tag", config.tagsEntrada, idLista));
 
   return {
     fluxo: {
@@ -504,6 +430,7 @@ export function montarFluxoTiktok(semanas, config = CONFIG_TIKTOK) {
     idEntrada,
     avisos,
     totalCursos: indiceRamo,
-    totalListas: listas.length,
+    totalListas: 1,
+    totalSecoes: secoes.length,
   };
 }
