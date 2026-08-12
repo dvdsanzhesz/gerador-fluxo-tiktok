@@ -18,7 +18,7 @@ import {
 const $ = (id) => document.getElementById(id);
 
 // Versão do gerador — aparece na tela pra sabermos qual arquivo está rodando.
-const VERSAO = 'v8';
+const VERSAO = 'v9';
 
 // ————— Regra do TikTok: quem já estava na semana anterior fica FORA —————
 // Um curso/congresso não entra no fluxo se:
