@@ -18,7 +18,7 @@ import {
 const $ = (id) => document.getElementById(id);
 
 // Versão do gerador — aparece na tela pra sabermos qual arquivo está rodando.
-const VERSAO = 'v5';
+const VERSAO = 'v7';
 
 // ————— Regra do TikTok: quem já estava na semana anterior fica FORA —————
 // Um curso/congresso não entra no fluxo se:
@@ -50,6 +50,14 @@ function chavesAbertura(a) {
   const base = normalizarChave(a?.codigoAbertura || a?.id).replace(/(?<=\d)r\d+$/i, '');
   if (base) chaves.push(`codigo:${base}`);
   return chaves;
+}
+
+// Cursos do México ficam FORA do fluxo do TikTok (Brasil).
+// Identificação: código começando com "mx" (padrão do Hub) ou categoria México.
+function ehMexico(a) {
+  const codigo = normalizarChave(a?.codigoAbertura || a?.cursoCodigo || a?.cursoId || a?.id);
+  if (codigo.startsWith('mx')) return true;
+  return normalizarChave(a?.categoria).includes('mexico');
 }
 
 function semanaAnteriorDe(semana) {
@@ -197,13 +205,16 @@ async function buscarCursos() {
         for (const chave of chavesAbertura(ant)) chavesAnterior.add(chave);
       }
 
-      // Marca cada abertura: fora por padrão se é reabertura OU repete a semana anterior.
+      // Marca cada abertura: fora por padrão se é do México, reabertura
+      // ou repete a semana anterior.
       for (const a of aberturas) {
+        const mexico = ehMexico(a);
+        const reab = ehReabertura(a);
         const repetida = chavesAbertura(a).some((chave) => chavesAnterior.has(chave));
-        a._foraPorPadrao = ehReabertura(a) || repetida;
-        a._motivoFora = ehReabertura(a)
-          ? '🔁 reabertura'
-          : (repetida ? '↩️ já estava na semana anterior' : '');
+        a._foraPorPadrao = mexico || reab || repetida;
+        a._motivoFora = mexico
+          ? '🇲🇽 curso do México'
+          : (reab ? '🔁 reabertura' : (repetida ? '↩️ já estava na semana anterior' : ''));
       }
 
       estado.semanas.push({
@@ -226,7 +237,7 @@ async function buscarCursos() {
     const foraTotal = estado.semanas.reduce(
       (s, g) => s + g.aberturas.filter((a) => a._foraPorPadrao).length, 0
     );
-    status(`✅ ${total} curso(s) encontrado(s) — ${foraTotal} fora por padrão (reabertura/semana anterior). [${VERSAO}]`, 'success');
+    status(`✅ ${total} curso(s) encontrado(s) — ${foraTotal} fora por padrão (México/reabertura/semana anterior). [${VERSAO}]`, 'success');
     renderSelecao();
   } catch (e) {
     console.error('[Gerador TikTok]', e);
@@ -248,25 +259,28 @@ function renderSelecao() {
 
   const grupos = $('tk-grupos');
   estado.semanas.forEach((grupo) => {
+    // Reaberturas, México e repetidos da semana anterior nem aparecem como opção.
+    const visiveis = grupo.aberturas.filter((a) => !a._foraPorPadrao);
+    const ocultos = grupo.aberturas.length - visiveis.length;
+
     const bloco = document.createElement('div');
     bloco.className = 'grupo';
     bloco.innerHTML = `
       <div class="grupo-titulo">${grupo.rotulo} — semana ${dataCurta(grupo.semana)}
-        <small>(${grupo.aberturas.length} curso(s))</small></div>
+        <small>(${visiveis.length} curso(s)${ocultos ? ` · ${ocultos} oculto(s): México/reabertura/semana anterior` : ''})</small></div>
       <div class="chips"></div>
     `;
     const chips = bloco.querySelector('.chips');
-    if (!grupo.aberturas.length) {
-      chips.innerHTML = '<em class="vazio">Nenhuma abertura cadastrada para esta semana.</em>';
+    if (!visiveis.length) {
+      chips.innerHTML = '<em class="vazio">Nenhum curso novo para esta semana.</em>';
     }
-    grupo.aberturas.forEach((abertura) => {
+    visiveis.forEach((abertura) => {
       const nome = (abertura.nomeCurso || '').trim();
       if (!nome) return;
-      const fora = Boolean(abertura._foraPorPadrao);
       const chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = fora ? 'chip' : 'chip ativo';
-      chip.textContent = `${nome} · ${abertura.contaAPI || 'sem conta'}${fora ? ` · ${abertura._motivoFora} (fora por padrão)` : ''}`;
+      chip.className = 'chip ativo';
+      chip.textContent = `${nome} · ${abertura.contaAPI || 'sem conta'}`;
       chip.addEventListener('click', () => {
         if (grupo.selecionados.has(nome)) {
           grupo.selecionados.delete(nome);
